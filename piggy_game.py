@@ -3,6 +3,7 @@ import os
 import sys
 import math  # Add this import that was missing
 import random  # Import random for placing obstacles
+import cv2  # For video playback
 
 # Initialize Pygame
 try:
@@ -85,6 +86,19 @@ class PiggyGame:
             self.rock_img = pygame.image.load(os.path.join(self.asset_dir, "rock.png")).convert_alpha()
             self.bird_img = pygame.image.load(os.path.join(self.asset_dir, "bird.png")).convert_alpha()
             self.obstacle_sprites = []  # List of dicts: {rect, type, img, collected}
+            
+            # Flower1 video size (for video flower obstacle)
+            self.flower1_video_width = 60
+            self.flower1_video_height = 80
+            # Load flower1.mp4 as a video obstacle
+            self.flower1_video_path = os.path.join(self.asset_dir, "flower1.mp4")
+            self.flower1_video = cv2.VideoCapture(self.flower1_video_path)
+            self.flower1_video_rect = None  # Will be set in _place_extra_obstacles
+            self.flower1_video_collected = False
+            self.flower1_video_frame = None
+            self.flower1_video_last_update = 0
+            self.flower1_video_fps = self.flower1_video.get(cv2.CAP_PROP_FPS) or 24
+            
             self._place_extra_obstacles()
             # Jump properties
             self.is_jumping = False
@@ -332,6 +346,19 @@ class PiggyGame:
         obs = random.choice(self.obstacles)
         bird_rect = pygame.Rect(obs.centerx - 30, obs.top - 90, 60, 60)
         self.obstacle_sprites.append({'rect': bird_rect, 'type': 'bird', 'img': self.bird_img, 'collected': False})
+        # Place flower1.mp4 video obstacle (on ground, like flower1)
+        import random
+        flower1_video_rect = pygame.Rect(random.randint(50, 700), GROUND_Y - 80, self.flower1_video_width, self.flower1_video_height)
+        def is_overlapping(new_rect, rects):
+            for r in rects:
+                if new_rect.colliderect(r):
+                    return True
+            return False
+        placed_rects = [*self.obstacles] + [o['rect'] for o in self.obstacle_sprites]
+        while is_overlapping(flower1_video_rect, placed_rects):
+            flower1_video_rect.x = random.randint(50, 700)
+        self.flower1_video_rect = flower1_video_rect
+        placed_rects.append(flower1_video_rect)
 
     def draw_extra_obstacles(self):
         for obs in self.obstacle_sprites:
@@ -346,6 +373,36 @@ class PiggyGame:
                 obs['collected'] = True
                 if self.fart_sound:
                     self.fart_sound.play()
+
+    def draw_flower1_video(self):
+        if self.flower1_video_collected:
+            return
+        # Update video frame based on FPS
+        now = pygame.time.get_ticks()
+        interval = int(1000 / self.flower1_video_fps)
+        if now - self.flower1_video_last_update > interval or self.flower1_video_frame is None:
+            ret, frame = self.flower1_video.read()
+            if not ret:
+                self.flower1_video.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                ret, frame = self.flower1_video.read()
+            if ret:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frame = cv2.resize(frame, (self.flower1_video_width, self.flower1_video_height))
+                surf = pygame.image.frombuffer(frame.tobytes(), frame.shape[1::-1], "RGB")
+                surf.set_colorkey((0, 0, 0))  # Make black transparent
+                self.flower1_video_frame = surf
+            self.flower1_video_last_update = now
+        if self.flower1_video_frame:
+            self.screen.blit(self.flower1_video_frame, (self.flower1_video_rect.x, self.flower1_video_rect.y))
+
+    def check_flower1_video_collision(self):
+        if self.flower1_video_collected:
+            return
+        pig_rect = pygame.Rect(self.pig_x, self.pig_y, self.pig_width, self.pig_height)
+        if pig_rect.colliderect(self.flower1_video_rect):
+            self.flower1_video_collected = True
+            if self.fart_sound:
+                self.fart_sound.play()
 
     def run(self):
         try:
@@ -383,10 +440,14 @@ class PiggyGame:
                 self.draw_flowers()
                 # Draw extra obstacles
                 self.draw_extra_obstacles()
+                # Draw flower1 video if not collected
+                self.draw_flower1_video()
                 # Check for flower collision
                 self.check_flower_collision()
                 # Check for extra obstacle collision
                 self.check_extra_obstacle_collision()
+                # Check for flower1 video collision
+                self.check_flower1_video_collision()
 
                 pygame.display.flip()
                 self.clock.tick(FPS)
