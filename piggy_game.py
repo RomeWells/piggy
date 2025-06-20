@@ -2,6 +2,7 @@ import pygame
 import os
 import sys
 import math  # Add this import that was missing
+import random  # Import random for placing obstacles
 
 # Initialize Pygame
 try:
@@ -78,6 +79,13 @@ class PiggyGame:
                 pygame.Rect(450, GROUND_Y - 60, 120, 60),
                 pygame.Rect(650, GROUND_Y - 30, 80, 30)
             ]
+            # Load new obstacle images
+            self.bush_img = pygame.image.load(os.path.join(self.asset_dir, "bush.png")).convert_alpha()
+            self.flower1_img = pygame.image.load(os.path.join(self.asset_dir, "flower1.png")).convert_alpha()
+            self.rock_img = pygame.image.load(os.path.join(self.asset_dir, "rock.png")).convert_alpha()
+            self.bird_img = pygame.image.load(os.path.join(self.asset_dir, "bird.png")).convert_alpha()
+            self.obstacle_sprites = []  # List of dicts: {rect, type, img, collected}
+            self._place_extra_obstacles()
             # Jump properties
             self.is_jumping = False
             self.jump_velocity = 0
@@ -105,6 +113,9 @@ class PiggyGame:
                 pygame.mixer.music.play(-1)  # Loop indefinitely
             except Exception as e:
                 print(f"Warning: Could not play background music: {e}")
+            # Background image
+            self.background_img = pygame.image.load(os.path.join(self.asset_dir, "background.png")).convert()
+            self.background_img = pygame.transform.smoothscale(self.background_img, (WINDOW_WIDTH, WINDOW_HEIGHT))
         except Exception as e:
             print(f"Error initializing game: {e}")
             input("Press Enter to exit...")
@@ -284,6 +295,58 @@ class PiggyGame:
                 self.is_jumping = False
                 self.jump_velocity = 0
 
+    def _place_extra_obstacles(self):
+        import random
+        # Helper to avoid overlap
+        def is_overlapping(new_rect, rects):
+            for r in rects:
+                if new_rect.colliderect(r):
+                    return True
+            return False
+        placed_rects = [*self.obstacles]
+        # Place bush (on ground)
+        bush_rect = pygame.Rect(random.randint(50, 700), GROUND_Y - 60, 100, 60)
+        while is_overlapping(bush_rect, placed_rects):
+            bush_rect.x = random.randint(50, 700)
+        self.obstacle_sprites.append({'rect': bush_rect, 'type': 'bush', 'img': self.bush_img, 'collected': False})
+        placed_rects.append(bush_rect)
+        # Place flower1 (on ground)
+        flower_rect = pygame.Rect(random.randint(50, 700), GROUND_Y - 80, 60, 80)
+        while is_overlapping(flower_rect, placed_rects):
+            flower_rect.x = random.randint(50, 700)
+        self.obstacle_sprites.append({'rect': flower_rect, 'type': 'flower1', 'img': self.flower1_img, 'collected': False})
+        placed_rects.append(flower_rect)
+        # Place rock (on ground or on top of a rectangular obstacle)
+        if random.random() < 0.5:
+            # On ground
+            rock_rect = pygame.Rect(random.randint(50, 700), GROUND_Y - 50, 70, 50)
+            while is_overlapping(rock_rect, placed_rects):
+                rock_rect.x = random.randint(50, 700)
+        else:
+            # On top of a rectangular obstacle
+            obs = random.choice(self.obstacles)
+            rock_rect = pygame.Rect(obs.centerx - 35, obs.top - 50, 70, 50)
+        self.obstacle_sprites.append({'rect': rock_rect, 'type': 'rock', 'img': self.rock_img, 'collected': False})
+        placed_rects.append(rock_rect)
+        # Place bird (above a rectangular obstacle)
+        obs = random.choice(self.obstacles)
+        bird_rect = pygame.Rect(obs.centerx - 30, obs.top - 90, 60, 60)
+        self.obstacle_sprites.append({'rect': bird_rect, 'type': 'bird', 'img': self.bird_img, 'collected': False})
+
+    def draw_extra_obstacles(self):
+        for obs in self.obstacle_sprites:
+            if not obs["collected"]:
+                img = pygame.transform.smoothscale(obs["img"], (obs["rect"].width, obs["rect"].height))
+                self.screen.blit(img, (obs["rect"].x, obs["rect"].y))
+
+    def check_extra_obstacle_collision(self):
+        pig_rect = pygame.Rect(self.pig_x, self.pig_y, self.pig_width, self.pig_height)
+        for obs in self.obstacle_sprites:
+            if not obs['collected'] and pig_rect.colliderect(obs['rect']):
+                obs['collected'] = True
+                if self.fart_sound:
+                    self.fart_sound.play()
+
     def run(self):
         try:
             running = True
@@ -303,8 +366,10 @@ class PiggyGame:
 
                 # Clear screen
                 self.screen.fill(WHITE)
+                # Draw background FIRST
+                self.screen.blit(self.background_img, (0, 0))
+                # Draw ground
                 self.draw_ground()
-                
                 # Draw obstacles
                 self.draw_obstacles()
                 
@@ -316,8 +381,12 @@ class PiggyGame:
                 self.screen.blit(self.pig, (self.pig_x, self.pig_y - self.bounce_offset))
                 # Draw flowers
                 self.draw_flowers()
+                # Draw extra obstacles
+                self.draw_extra_obstacles()
                 # Check for flower collision
                 self.check_flower_collision()
+                # Check for extra obstacle collision
+                self.check_extra_obstacle_collision()
 
                 pygame.display.flip()
                 self.clock.tick(FPS)
