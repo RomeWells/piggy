@@ -38,6 +38,21 @@ class PiggyGame:
             self.pig_speed = 5
             self.facing_right = True
             
+            # Asset directory relative to script
+            self.asset_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+            # Load piggy images for left movement only
+            self.piggy_fly_left_img = pygame.image.load(os.path.join(self.asset_dir, "piggy_fly_left.png")).convert_alpha()
+            self.piggy_jump_left_img = pygame.image.load(os.path.join(self.asset_dir, "piggy_jump_left.png")).convert_alpha()
+            self.piggy_sit_left_img = pygame.image.load(os.path.join(self.asset_dir, "piggy_sit_left.png")).convert_alpha()
+            # Load piggy images for right movement animation
+            self.piggy_right_imgs = [
+                pygame.image.load(os.path.join(self.asset_dir, f"piggy_right{i+1}.png")).convert_alpha()
+                for i in range(3)
+            ]
+            self.piggy_right_frame = 0
+            self.piggy_right_anim_speed = 0.15  # Animation speed
+            self.piggy_right_anim_time = 0
+            
             # Create a pig surface with more detail
             self.pig = pygame.Surface((self.pig_width, self.pig_height), pygame.SRCALPHA)
             
@@ -49,7 +64,7 @@ class PiggyGame:
             
             # Sound effects
             try:
-                self.oink_sound = pygame.mixer.Sound(os.path.join("assets", "oink.mp3"))
+                self.oink_sound = pygame.mixer.Sound(os.path.join(self.asset_dir, "oink.mp3"))
             except:
                 print("Warning: Could not load sound file")
                 self.oink_sound = None
@@ -70,7 +85,7 @@ class PiggyGame:
             self.gravity = 0.7
             # Fart sound
             try:
-                self.fart_sound = pygame.mixer.Sound(os.path.join("assets", "fart.mp3"))
+                self.fart_sound = pygame.mixer.Sound(os.path.join(self.asset_dir, "fart.mp3"))
             except:
                 print("Warning: Could not load fart sound file")
                 self.fart_sound = None
@@ -80,56 +95,51 @@ class PiggyGame:
             sys.exit(1)
 
     def draw_pig(self, surface, x, y):
-        # Body (oval)
-        pygame.draw.ellipse(surface, PINK, (0, 0, self.pig_width, self.pig_height))
-        
-        # Eyes
-        eye_x1 = 20 if self.facing_right else 45
-        eye_x2 = 45 if self.facing_right else 20
-        pygame.draw.circle(surface, BLACK, (eye_x1, 30), 6)
-        pygame.draw.circle(surface, BLACK, (eye_x2, 30), 6)
-        pygame.draw.circle(surface, WHITE, (eye_x1 - 2, 28), 2)
-        pygame.draw.circle(surface, WHITE, (eye_x2 - 2, 28), 2)
-        
-        # Nose (snout)
-        nose_x = 25 if self.facing_right else 30
-        pygame.draw.ellipse(surface, (255, 150, 170), (nose_x, 40, 25, 20))
-        pygame.draw.circle(surface, BLACK, (nose_x + 8, 48), 4)
-        pygame.draw.circle(surface, BLACK, (nose_x + 17, 48), 4)
-        
-        # Ears
-        ear_x1 = 10 if self.facing_right else 50
-        ear_x2 = 40 if self.facing_right else 20
-        pygame.draw.ellipse(surface, PINK, (ear_x1, 5, 20, 25))
-        pygame.draw.ellipse(surface, PINK, (ear_x2, 5, 20, 25))
+        # Only use special images when moving left or right
+        if not self.facing_right:
+            if self.is_jumping:
+                if self.jump_velocity < 0:
+                    piggy_img = self.piggy_jump_left_img  # Going up left
+                else:
+                    piggy_img = self.piggy_fly_left_img   # Falling/flying left
+            elif not self.moving:
+                piggy_img = self.piggy_sit_left_img      # Sitting left
+            else:
+                piggy_img = self.piggy_sit_left_img      # Default to sit when moving on ground left
+            # No flip needed, images are already left-facing
+        else:
+            # Animate piggy moving right
+            if self.moving:
+                self.piggy_right_anim_time += self.piggy_right_anim_speed
+                self.piggy_right_frame = int(self.piggy_right_anim_time) % len(self.piggy_right_imgs)
+            else:
+                self.piggy_right_frame = 0
+                self.piggy_right_anim_time = 0
+            piggy_img = self.piggy_right_imgs[self.piggy_right_frame]
+        # Scale image to piggy size
+        piggy_img = pygame.transform.smoothscale(piggy_img, (self.pig_width, self.pig_height))
+        surface.blit(piggy_img, (0, 0))
+        # Remove all custom drawing code below, only use the image
+        # ...existing code...
 
     def handle_input(self):
         keys = pygame.key.get_pressed()
         moved = False
+        self.moving = False  # Track if piggy is moving for animation
         pig_rect = pygame.Rect(self.pig_x, self.pig_y, self.pig_width, self.pig_height)
-        dx, dy = 0, 0
+        dx = 0
+        # Only allow left/right movement with arrow keys
         if keys[pygame.K_LEFT]:
             dx = -self.pig_speed
             self.facing_right = False
         if keys[pygame.K_RIGHT]:
             dx = self.pig_speed
             self.facing_right = True
-        if not self.is_jumping:
-            if keys[pygame.K_UP]:
-                dy = -self.pig_speed
-            if keys[pygame.K_DOWN]:
-                dy = self.pig_speed
         # Move horizontally (allow in air)
         if dx != 0:
             new_rect = pig_rect.move(dx, 0)
             if not self.check_collision(new_rect):
                 self.pig_x += dx
-                moved = True
-        # Move vertically (only if not jumping)
-        if dy != 0 and not self.is_jumping:
-            new_rect = pig_rect.move(0, dy)
-            if not self.check_collision(new_rect):
-                self.pig_y += dy
                 moved = True
         # Jumping
         if not self.is_jumping and keys[pygame.K_SPACE]:
@@ -147,6 +157,12 @@ class PiggyGame:
                 self.pig_y = floor_y
                 self.is_jumping = False
                 self.jump_velocity = 0
+        # Prevent going below ground
+        min_y = self.get_floor_y(pig_rect)
+        if self.pig_y > min_y:
+            self.pig_y = min_y
+            self.is_jumping = False
+            self.jump_velocity = 0
         # Play oink sound when moving (not jumping)
         current_time = pygame.time.get_ticks()
         if moved and not self.is_jumping and current_time - self.last_sound_time > self.sound_cooldown:
@@ -157,9 +173,17 @@ class PiggyGame:
         if moved and not self.is_jumping:
             self.bounce_time += self.bounce_speed
             self.bounce_offset = abs(math.sin(self.bounce_time) * self.bounce_height)
+            self.moving = True
         else:
             self.bounce_offset = 0
             self.bounce_time = 0
+            self.moving = False
+        # Update right-facing animation
+        if self.facing_right:
+            self.piggy_right_anim_time += self.piggy_right_anim_speed
+            if self.piggy_right_anim_time >= 1:
+                self.piggy_right_anim_time = 0
+                self.piggy_right_frame = (self.piggy_right_frame + 1) % len(self.piggy_right_imgs)
 
     def apply_gravity(self):
         if self.is_jumping:
