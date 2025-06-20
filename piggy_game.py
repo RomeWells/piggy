@@ -1,13 +1,18 @@
 import pygame
 import os
 import sys
+import math  # Add this import that was missing
 
 # Initialize Pygame
-pygame.init()
-pygame.mixer.init()
+try:
+    pygame.init()
+    pygame.mixer.init()
+except:
+    print("Error initializing Pygame")
+    input("Press Enter to exit...")
+    sys.exit(1)
 
-# Constantsd
-test
+# Constants
 WINDOW_WIDTH = 800
 WINDOW_HEIGHT = 600
 FPS = 60
@@ -19,37 +24,42 @@ BLACK = (0, 0, 0)
 
 class PiggyGame:
     def __init__(self):
-        self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-        pygame.display.set_caption("Piggy Adventure")
-        self.clock = pygame.time.Clock()
-        
-        # Pig properties
-        self.pig_width = 80
-        self.pig_height = 80
-        self.pig_x = WINDOW_WIDTH // 2
-        self.pig_y = WINDOW_HEIGHT // 2
-        self.pig_speed = 5
-        self.facing_right = True
-        
-        # Create a pig surface with more detail
-        self.pig = pygame.Surface((self.pig_width, self.pig_height), pygame.SRCALPHA)
-        
-        # Animation properties
-        self.bounce_offset = 0
-        self.bounce_speed = 0.1
-        self.bounce_height = 3
-        self.bounce_time = 0
-        
-        # Sound effects
         try:
-            self.oink_sound = pygame.mixer.Sound(os.path.join("assets", "oink.wav"))
-        except:
-            print("Warning: Could not load sound file")
-            self.oink_sound = None
+            self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+            pygame.display.set_caption("Piggy Adventure")
+            self.clock = pygame.time.Clock()
             
-        # Sound cooldown
-        self.last_sound_time = 0
-        self.sound_cooldown = 500  # milliseconds
+            # Pig properties
+            self.pig_width = 80
+            self.pig_height = 80
+            self.pig_x = WINDOW_WIDTH // 2
+            self.pig_y = WINDOW_HEIGHT // 2
+            self.pig_speed = 5
+            self.facing_right = True
+            
+            # Create a pig surface with more detail
+            self.pig = pygame.Surface((self.pig_width, self.pig_height), pygame.SRCALPHA)
+            
+            # Animation properties
+            self.bounce_offset = 0
+            self.bounce_speed = 0.1
+            self.bounce_height = 3
+            self.bounce_time = 0
+            
+            # Sound effects
+            try:
+                self.oink_sound = pygame.mixer.Sound(os.path.join("assets", "oink.wav"))
+            except:
+                print("Warning: Could not load sound file")
+                self.oink_sound = None
+                
+            # Sound cooldown
+            self.last_sound_time = 0
+            self.sound_cooldown = 500  # milliseconds
+        except Exception as e:
+            print(f"Error initializing game: {e}")
+            input("Press Enter to exit...")
+            sys.exit(1)
 
     def draw_pig(self, surface, x, y):
         # Body (oval)
@@ -111,37 +121,44 @@ class PiggyGame:
             self.bounce_time = 0
 
     def run(self):
-        running = True
-        while running:
-            # Event handling
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
+        try:
+            running = True
+            while running:
+                # Event handling
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
                         running = False
+                    elif event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_ESCAPE:
+                            running = False
 
-            # Handle input
-            self.handle_input()
+                # Handle input
+                self.handle_input()
 
-            # Clear screen
-            self.screen.fill(WHITE)
-            
-            # Create new pig surface and draw pig
-            self.pig.fill((0, 0, 0, 0))  # Clear with transparency
-            self.draw_pig(self.pig, 0, 0)
-            
-            # Draw the pig with bounce offset
-            self.screen.blit(self.pig, (self.pig_x, self.pig_y - self.bounce_offset))
+                # Clear screen
+                self.screen.fill(WHITE)
+                
+                # Create new pig surface and draw pig
+                self.pig.fill((0, 0, 0, 0))  # Clear with transparency
+                self.draw_pig(self.pig, 0, 0)
+                
+                # Draw the pig with bounce offset
+                self.screen.blit(self.pig, (self.pig_x, self.pig_y - self.bounce_offset))
 
-            pygame.display.flip()
-            self.clock.tick(FPS)
+                pygame.display.flip()
+                self.clock.tick(FPS)
 
-        pygame.quit()
-        sys.exit()
+        except Exception as e:
+            print(f"Error during game loop: {e}")
+            input("Press Enter to exit...")
+        finally:
+            pygame.quit()
+            sys.exit()
 
 if __name__ == "__main__":
-    game = PiggyGame()
-    game.run()
-
-
+    try:
+        game = PiggyGame()
+        game.run()
+    except Exception as e:
+        print(f"Fatal error: {e}")
+        input("Press Enter to exit...")
