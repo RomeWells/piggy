@@ -89,6 +89,22 @@ class PiggyGame:
             except:
                 print("Warning: Could not load fart sound file")
                 self.fart_sound = None
+            # Flower properties
+            self.flower_img = pygame.image.load(os.path.join(self.asset_dir, "flowers.png")).convert_alpha()
+            self.flower_width = 50
+            self.flower_height = 50
+            self.flower_rects = [
+                pygame.Rect(350, GROUND_Y - self.flower_height, self.flower_width, self.flower_height),
+                pygame.Rect(600, GROUND_Y - self.flower_height, self.flower_width, self.flower_height)
+            ]
+            self.collected_flowers = set()
+            # Background music
+            self.music_file = os.path.join(self.asset_dir, "youcanhavesomeflowers.mp3")
+            try:
+                pygame.mixer.music.load(self.music_file)
+                pygame.mixer.music.play(-1)  # Loop indefinitely
+            except Exception as e:
+                print(f"Warning: Could not play background music: {e}")
         except Exception as e:
             print(f"Error initializing game: {e}")
             input("Press Enter to exit...")
@@ -123,12 +139,13 @@ class PiggyGame:
         # ...existing code...
 
     def handle_input(self):
+        # Remove vertical movement from handle_input
+        # Only handle horizontal movement and jumping intent here
         keys = pygame.key.get_pressed()
         moved = False
         self.moving = False  # Track if piggy is moving for animation
         pig_rect = pygame.Rect(self.pig_x, self.pig_y, self.pig_width, self.pig_height)
         dx = 0
-        # Only allow left/right movement with arrow keys
         if keys[pygame.K_LEFT]:
             dx = -self.pig_speed
             self.facing_right = False
@@ -145,24 +162,6 @@ class PiggyGame:
         if not self.is_jumping and keys[pygame.K_SPACE]:
             self.is_jumping = True
             self.jump_velocity = -self.jump_strength
-            if self.fart_sound:
-                self.fart_sound.play()
-        # Apply jump physics
-        if self.is_jumping:
-            self.pig_y += self.jump_velocity
-            self.jump_velocity += self.gravity
-            pig_rect = pygame.Rect(self.pig_x, self.pig_y, self.pig_width, self.pig_height)
-            floor_y = self.get_floor_y(pig_rect)
-            if self.pig_y >= floor_y:
-                self.pig_y = floor_y
-                self.is_jumping = False
-                self.jump_velocity = 0
-        # Prevent going below ground
-        min_y = self.get_floor_y(pig_rect)
-        if self.pig_y > min_y:
-            self.pig_y = min_y
-            self.is_jumping = False
-            self.jump_velocity = 0
         # Play oink sound when moving (not jumping)
         current_time = pygame.time.get_ticks()
         if moved and not self.is_jumping and current_time - self.last_sound_time > self.sound_cooldown:
@@ -232,6 +231,59 @@ class PiggyGame:
                     min_y = obs_top
         return min_y
 
+    def draw_flowers(self):
+        for idx, rect in enumerate(self.flower_rects):
+            if idx not in self.collected_flowers:
+                flower_img = pygame.transform.smoothscale(self.flower_img, (self.flower_width, self.flower_height))
+                self.screen.blit(flower_img, (rect.x, rect.y))
+
+    def check_flower_collision(self):
+        pig_rect = pygame.Rect(self.pig_x, self.pig_y, self.pig_width, self.pig_height)
+        for idx, rect in enumerate(self.flower_rects):
+            if idx not in self.collected_flowers and pig_rect.colliderect(rect):
+                self.collected_flowers.add(idx)
+                if self.fart_sound:
+                    self.fart_sound.play()
+
+    def update_vertical_position(self):
+        # Always apply gravity if not standing on ground or obstacle
+        prev_y = self.pig_y
+        pig_rect = pygame.Rect(self.pig_x, self.pig_y, self.pig_width, self.pig_height)
+        floor_y = self.get_floor_y(pig_rect)
+        if self.is_jumping:
+            next_y = self.pig_y + self.jump_velocity
+            self.jump_velocity += self.gravity
+            # Predict next position
+            test_rect = pygame.Rect(self.pig_x, next_y, self.pig_width, self.pig_height)
+            landed = False
+            for obs in self.obstacles:
+                # Only check if moving downward and crossing the top of the obstacle
+                if prev_y + self.pig_height <= obs.top and next_y + self.pig_height >= obs.top:
+                    if test_rect.right > obs.left and test_rect.left < obs.right:
+                        self.pig_y = obs.top - self.pig_height
+                        self.is_jumping = False
+                        self.jump_velocity = 0
+                        landed = True
+                        break
+            if not landed:
+                # Check for ground
+                ground_y = GROUND_Y - self.pig_height
+                if next_y >= ground_y:
+                    self.pig_y = ground_y
+                    self.is_jumping = False
+                    self.jump_velocity = 0
+                else:
+                    self.pig_y = next_y
+        else:
+            # If not jumping, check if piggy is standing on something
+            if self.pig_y < floor_y:
+                self.is_jumping = True
+                self.jump_velocity = 0
+            else:
+                self.pig_y = floor_y
+                self.is_jumping = False
+                self.jump_velocity = 0
+
     def run(self):
         try:
             running = True
@@ -246,6 +298,8 @@ class PiggyGame:
 
                 # Handle input
                 self.handle_input()
+                # Always update vertical position (gravity/falling)
+                self.update_vertical_position()
 
                 # Clear screen
                 self.screen.fill(WHITE)
@@ -260,6 +314,10 @@ class PiggyGame:
                 
                 # Draw the pig with bounce offset
                 self.screen.blit(self.pig, (self.pig_x, self.pig_y - self.bounce_offset))
+                # Draw flowers
+                self.draw_flowers()
+                # Check for flower collision
+                self.check_flower_collision()
 
                 pygame.display.flip()
                 self.clock.tick(FPS)
