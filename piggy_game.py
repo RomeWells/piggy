@@ -48,7 +48,7 @@ class PiggyGame:
             
             # Sound effects
             try:
-                self.oink_sound = pygame.mixer.Sound(os.path.join("assets", "oink.wav"))
+                self.oink_sound = pygame.mixer.Sound(os.path.join("assets", "oink.mp3"))
             except:
                 print("Warning: Could not load sound file")
                 self.oink_sound = None
@@ -88,7 +88,6 @@ class PiggyGame:
     def handle_input(self):
         keys = pygame.key.get_pressed()
         moved = False
-        
         if keys[pygame.K_LEFT]:
             self.pig_x = max(0, self.pig_x - self.pig_speed)
             self.facing_right = False
@@ -103,15 +102,12 @@ class PiggyGame:
         if keys[pygame.K_DOWN]:
             self.pig_y = min(WINDOW_HEIGHT - self.pig_height, self.pig_y + self.pig_speed)
             moved = True
-        
-        # Handle space bar for oink sound
-        if keys[pygame.K_SPACE]:
-            current_time = pygame.time.get_ticks()
-            if current_time - self.last_sound_time > self.sound_cooldown:
-                if self.oink_sound:
-                    self.oink_sound.play()
-                self.last_sound_time = current_time
-        
+        # Play sound when piggy moves
+        current_time = pygame.time.get_ticks()
+        if moved and current_time - self.last_sound_time > self.sound_cooldown:
+            if self.oink_sound:
+                self.oink_sound.play()
+            self.last_sound_time = current_time
         # Update bounce animation
         if moved:
             self.bounce_time += self.bounce_speed
